@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  password  String
+  name      String
+  email     String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  orders    Order[]
+  addresses Address[]
+  restaurants Restaurant[]
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  label     String   // Home, Work, Other
+  street    String
+  city      String
+  state     String
+  zipCode   String
+  landmark  String?
+  latitude  Float?   // Address latitude for distance calculation
+  longitude Float?   // Address longitude for distance calculation
+  isDefault Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  orders    Order[]
+}
+
+model Restaurant {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  coverImage  String?
+  rating      Float    @default(4.0)
+  totalRatings Int     @default(0)
+  deliveryTime String  @default("30-40 mins")
+  costForTwo  Int      @default(3000)
+  cuisines    String?   // comma-separated
+  isOpen      Boolean  @default(true)
+  address     String
+  latitude    Float?   // Restaurant latitude for distance calculation
+  longitude   Float?   // Restaurant longitude for distance calculation
+  phone       String?
+  gstNumber   String?
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  menuItems   MenuItem[]
+  orders      Order[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  icon      String?
+  order     Int      @default(0)
+  
+  menuItems MenuItem[]
+}
+
+model MenuItem {
+  id           String   @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  
+  name         String
+  description  String
+  price        Int      // in cents
+  image        String?
+  isVeg        Boolean  @default(true)
+  isAvailable  Boolean  @default(true)
+  isPopular    Boolean  @default(false)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  orderItems   OrderItem[]
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  orderNumber  String      @unique
+  
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  
+  restaurantId String
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  
+  addressId    String
+  address      Address     @relation(fields: [addressId], references: [id])
+  
+  status       OrderStatus @default(PENDING)
+  deliveryLevel DeliveryLevel @default(STANDARD)
+  
+  subtotal     Int         // in cents
+  deliveryFee  Int         // in cents
+  tax          Int         // in cents
+  tip          Int         @default(0) // in cents
+  total        Int         // in cents
+  
+  paymentMethod String     // COD, CARD, UPI
+  paymentStatus PaymentStatus @default(PENDING)
+  
+  specialInstructions String?
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  items        OrderItem[]
+  invoice      Invoice?
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  
+  quantity   Int
+  price      Int      // in cents (price at time of order)
+  
+  createdAt  DateTime @default(now())
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum DeliveryLevel {
+  STANDARD
+  EXPRESS
+  PRIORITY
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  orderId        String   @unique
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoiceNumber  String   @unique
+  amount         Int      // in cents
+  createdAt      DateTime @default(now())
+}
