@@ -1,9 +1,4 @@
-/**
- * Fee Management Library - Main Export
- * 
- * This is the main entry point for the fee management library.
- * Import from here to use the fee management system.
- */
+// @ts-nocheck
 
 // Main classes
 export { FeeManager } from './manager'

@@ -6,7 +6,6 @@
  */
 
 import { FeeManager } from './manager'
-import { FeeConfiguration } from './types'
 
 // Create the default fee manager instance
 export const feeManager = new FeeManager()
