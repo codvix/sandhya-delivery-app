@@ -46,13 +46,25 @@ function toRadians(degrees: number): number {
  * @returns Delivery fee in cents
  */
 export function calculateDeliveryFee(distance: number, orderValue: number): number {
-  // Base delivery fee for orders below ₹199 (19900 cents)
-  const baseFee = orderValue < 19900 ? 1000 : 0 // ₹10 for orders below ₹199
+  // Free delivery for orders ≥₹199 (19900 cents)
+  if (orderValue >= 19900) {
+    return 0
+  }
   
-  // Distance-based fee: ₹10 per km
+  // For orders below ₹199: ₹10 base fee + ₹10 per km
+  const baseFee = 1000 // ₹10 base fee
   const distanceFee = Math.ceil(distance) * 1000 // ₹10 per km
   
   return baseFee + distanceFee
+}
+
+/**
+ * Validate if delivery is possible within the maximum radius
+ * @param distance Distance in kilometers
+ * @returns True if delivery is possible, false otherwise
+ */
+export function isDeliveryPossible(distance: number): boolean {
+  return distance <= 5.0 // Maximum 5km radius
 }
 
 /**

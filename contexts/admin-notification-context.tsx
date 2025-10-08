@@ -3,25 +3,10 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 import { useAuth } from "./auth-context"
-import { AdminOrderPopup } from "@/components/admin-order-popup"
-
-interface Order {
-  id: string
-  orderNumber: string
-  user: {
-    name: string
-    phone: string
-  }
-  restaurant: {
-    name: string
-  }
-  total: number
-  createdAt: string
-}
 
 interface AdminNotification {
   id: string
-  type: 'new_order' | 'order_status_change'
+  type: string
   title: string
   message: string
   orderId?: string
@@ -29,165 +14,237 @@ interface AdminNotification {
   status?: string
   read: boolean
   createdAt: string
-  order?: Order
+  restaurantName?: string
+  customerName?: string
 }
 
 interface AdminNotificationContextType {
   notifications: AdminNotification[]
   unreadCount: number
-  showOrderPopup: (order: Order) => void
-  hideOrderPopup: () => void
   markAsRead: (notificationId: string) => void
   markAllAsRead: () => void
-  clearNotifications: () => void
   addNotification: (notification: Omit<AdminNotification, 'id' | 'read' | 'createdAt'>) => void
+  clearNotifications: () => void
+  showNewOrderPopup: boolean
+  newOrderData: AdminNotification | null
+  closeNewOrderPopup: () => void
 }
 
 const AdminNotificationContext = createContext<AdminNotificationContextType | undefined>(undefined)
 
 export function AdminNotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AdminNotification[]>([])
-  const [currentOrder, setCurrentOrder] = useState<Order | null>(null)
-  const [isPopupVisible, setIsPopupVisible] = useState(false)
+  const [showNewOrderPopup, setShowNewOrderPopup] = useState(false)
+  const [newOrderData, setNewOrderData] = useState<AdminNotification | null>(null)
   const { user } = useAuth()
   const lastOrderIdsRef = useRef<Set<string>>(new Set())
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  // Load notifications from localStorage on mount
+  // Load notifications from database on mount
   useEffect(() => {
-    if (user) {
-      const stored = localStorage.getItem(`admin_notifications_${user.id}`)
-      if (stored) {
-        try {
-          setNotifications(JSON.parse(stored))
-        } catch (error) {
-          console.error('Failed to parse stored admin notifications:', error)
-        }
-      }
-
-      // Load last order IDs to prevent duplicate notifications
-      const storedOrderIds = localStorage.getItem(`admin_lastOrderIds_${user.id}`)
-      if (storedOrderIds) {
-        try {
-          lastOrderIdsRef.current = new Set(JSON.parse(storedOrderIds))
-        } catch (error) {
-          console.error('Failed to parse stored order IDs:', error)
-        }
-      }
+    if (user?.role === "ADMIN") {
+      loadNotifications()
     }
   }, [user])
 
-  // Save notifications to localStorage whenever they change
+  const loadNotifications = async () => {
+    try {
+      const response = await fetch('/api/admin/notifications')
+      if (response.ok) {
+        const data = await response.json()
+        setNotifications(data)
+        
+        // Populate the lastOrderIdsRef with existing order IDs to prevent duplicates
+        data.forEach((notification: AdminNotification) => {
+          if (notification.orderId) {
+            lastOrderIdsRef.current.add(notification.orderId)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Failed to load notifications:', error)
+    }
+  }
+
+  // Poll for new orders (admin only)
   useEffect(() => {
-    if (user) {
-      localStorage.setItem(`admin_notifications_${user.id}`, JSON.stringify(notifications))
-    }
-  }, [notifications, user])
+    if (!user || user.role !== "ADMIN") return
 
-  // Save last order IDs to localStorage whenever they change
-  useEffect(() => {
-    if (user && lastOrderIdsRef.current.size > 0) {
-      localStorage.setItem(`admin_lastOrderIds_${user.id}`, JSON.stringify(Array.from(lastOrderIdsRef.current)))
-    }
-  }, [user])
+    const pollOrders = async () => {
+      try {
+        const response = await fetch('/api/admin/orders')
+        if (response.ok) {
+          const orders = await response.json()
+          
+          // Check for new orders by comparing with existing notifications
+          for (const order of orders) {
+            // Check if we already have a notification for this order
+            const existingNotification = notifications.find(n => n.orderId === order.id)
+            
+            if (!existingNotification && !lastOrderIdsRef.current.has(order.id)) {
+              // This is a new order - create notification in database
+              try {
+                const notificationResponse = await fetch('/api/admin/notifications', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'new_order',
+                    title: 'New Order Received!',
+                    message: `Order #${order.orderNumber} from ${order.user.name}`,
+                    orderId: order.id,
+                    orderNumber: order.orderNumber,
+                    status: order.status,
+                    restaurantName: order.restaurant.name,
+                    customerName: order.user.name
+                  })
+                })
 
-  const addNotification = (notification: Omit<AdminNotification, 'id' | 'read' | 'createdAt'>) => {
-    // Check for duplicate notifications
-    const isDuplicate = notifications.some(n => 
-      n.orderId === notification.orderId && 
-      n.type === notification.type
-    )
+                if (notificationResponse.ok) {
+                  const newNotification = await notificationResponse.json()
+                  setNotifications(prev => [newNotification, ...prev])
+                  setNewOrderData(newNotification)
+                  setShowNewOrderPopup(true)
+                  
+                  // Play notification sound
+                  try {
+                    const audio = new Audio('/sounds/happy-bells-notification-937.wav')
+                    audio.volume = 0.8
+                    audio.play().catch(() => {}) // Ignore autoplay errors
+                  } catch (error) {
+                    // Ignore audio errors
+                  }
+                }
+              } catch (error) {
+                console.error('Failed to create notification:', error)
+              }
 
-    if (isDuplicate) {
-      console.log('Duplicate admin notification prevented:', notification)
-      return
+              // Add to known orders
+              lastOrderIdsRef.current.add(order.id)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to poll admin orders:', error)
+      }
     }
 
-    const newNotification: AdminNotification = {
-      ...notification,
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      read: false,
-      createdAt: new Date().toISOString()
-    }
+    // Poll every 10 seconds for admin (more frequent than customer)
+    const interval = setInterval(pollOrders, 10000)
     
-    setNotifications(prev => [newNotification, ...prev])
-  }
+    // Initial poll
+    pollOrders()
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
-    )
-  }
+    return () => clearInterval(interval)
+  }, [user, notifications])
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  }
-
-  const clearNotifications = () => {
-    setNotifications([])
-    if (user) {
-      localStorage.removeItem(`admin_notifications_${user.id}`)
-      localStorage.removeItem(`admin_lastOrderIds_${user.id}`)
-    }
-  }
-
-  // Clean up old notifications (keep only last 50)
-  useEffect(() => {
-    if (notifications.length > 50) {
-      setNotifications(prev => {
-        const sorted = prev.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        return sorted.slice(0, 50)
+  const addNotification = async (notification: Omit<AdminNotification, 'id' | 'read' | 'createdAt'>) => {
+    try {
+      const response = await fetch('/api/admin/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(notification)
       })
+
+      if (response.ok) {
+        const newNotification = await response.json()
+        setNotifications(prev => [newNotification, ...prev])
+        
+        // Play notification sound
+        try {
+          const audio = new Audio('/sounds/happy-bells-notification-937.wav')
+          audio.volume = 0.8
+          audio.play().catch(() => {}) // Ignore autoplay errors
+        } catch (error) {
+          // Ignore audio errors
+        }
+      }
+    } catch (error) {
+      console.error('Failed to add notification:', error)
     }
-  }, [notifications.length])
-
-  const showOrderPopup = (order: Order) => {
-    setCurrentOrder(order)
-    setIsPopupVisible(true)
-    
-    // Auto-hide after 15 seconds
-    setTimeout(() => {
-      hideOrderPopup()
-    }, 15000)
   }
 
-  const hideOrderPopup = () => {
-    setIsPopupVisible(false)
-    setCurrentOrder(null)
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch('/api/admin/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notificationId,
+          read: true
+        })
+      })
+
+      if (response.ok) {
+        setNotifications(prev => 
+          prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+        )
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error)
+    }
   }
 
-  const handleViewOrder = (orderId: string) => {
-    // Mark related notifications as read
-    setNotifications(prev => 
-      prev.map(n => 
-        n.orderId === orderId ? { ...n, read: true } : n
-      )
-    )
-    hideOrderPopup()
+  const markAllAsRead = async () => {
+    try {
+      const response = await fetch('/api/admin/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          read: true
+        })
+      })
+
+      if (response.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      }
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error)
+    }
+  }
+
+  const clearNotifications = async () => {
+    try {
+      const response = await fetch('/api/admin/notifications', {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setNotifications([])
+        // Clear the in-memory order IDs as well
+        lastOrderIdsRef.current.clear()
+      }
+    } catch (error) {
+      console.error('Failed to clear notifications:', error)
+    }
+  }
+
+  const closeNewOrderPopup = () => {
+    setShowNewOrderPopup(false)
+    setNewOrderData(null)
   }
 
   return (
     <AdminNotificationContext.Provider value={{
       notifications,
       unreadCount,
-      showOrderPopup,
-      hideOrderPopup,
       markAsRead,
       markAllAsRead,
+      addNotification,
       clearNotifications,
-      addNotification
+      showNewOrderPopup,
+      newOrderData,
+      closeNewOrderPopup
     }}>
       {children}
-      
-      {/* Render popup if visible */}
-      {isPopupVisible && currentOrder && (
-        <AdminOrderPopup
-          order={currentOrder}
-          onClose={hideOrderPopup}
-          onViewOrder={handleViewOrder}
-        />
-      )}
     </AdminNotificationContext.Provider>
   )
 }

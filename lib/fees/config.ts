@@ -113,14 +113,33 @@ export const DEFAULT_FEE_CONFIGS: FeeConfig[] = [
     maxAmount: 100 // ₹1.00 max
   },
   {
-    id: 'distance_based_delivery',
-    name: 'Distance-Based Delivery Fee',
+    id: 'free_delivery_threshold',
+    name: 'Free Delivery Threshold',
     type: 'delivery',
     method: 'conditional',
     enabled: true,
     priority: 0, // Highest priority - check first
     displayName: 'Delivery Fee',
-    description: 'Distance-based delivery charge: ₹10 base + ₹10 per km',
+    description: 'Free delivery for orders ≥₹199',
+    showInBreakdown: true,
+    conditions: [
+      {
+        field: 'subtotal',
+        operator: 'greater_than',
+        value: 19899, // ₹199.00 (19900 cents - 1)
+        amount: 0 // Free delivery
+      }
+    ]
+  },
+  {
+    id: 'distance_based_delivery',
+    name: 'Distance-Based Delivery Fee',
+    type: 'delivery',
+    method: 'conditional',
+    enabled: true,
+    priority: 1, // Second priority
+    displayName: 'Delivery Fee',
+    description: 'Distance-based delivery charge: ₹10 base + ₹10 per km for orders <₹199',
     showInBreakdown: true,
     conditions: [
       {
@@ -128,25 +147,6 @@ export const DEFAULT_FEE_CONFIGS: FeeConfig[] = [
         operator: 'greater_than',
         value: 0,
         amount: 0 // Will be calculated dynamically
-      }
-    ]
-  },
-  {
-    id: 'free_delivery_threshold',
-    name: 'Free Delivery Threshold',
-    type: 'delivery',
-    method: 'conditional',
-    enabled: true,
-    priority: 1, // Second priority
-    displayName: 'Delivery Fee',
-    description: 'Free delivery for orders above threshold',
-    showInBreakdown: true,
-    conditions: [
-      {
-        field: 'subtotal',
-        operator: 'greater_than',
-        value: 19900, // ₹199.00
-        amount: 0 // Free delivery
       }
     ]
   }

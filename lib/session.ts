@@ -1,4 +1,5 @@
 import { cookies } from "next/headers"
+import { NextRequest } from "next/server"
 import { prisma } from "./prisma"
 
 export interface SessionUser {
@@ -87,4 +88,8 @@ export async function getSession(): Promise<SessionUser | null> {
 export async function deleteSession(): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.delete(SESSION_COOKIE_NAME)
+}
+
+export async function getCurrentUser(request: NextRequest): Promise<SessionUser | null> {
+  return await getSession()
 }

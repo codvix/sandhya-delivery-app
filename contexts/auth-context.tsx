@@ -16,7 +16,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (phone: string, password: string) => Promise<void>
+  login: (phone: string, password: string) => Promise<boolean>
   signup: (phone: string, password: string, name: string, email?: string) => Promise<void>
   logout: () => Promise<void>
   updateUser: (data: { name: string; email?: string; phone: string; currentPassword?: string; newPassword?: string }) => Promise<void>
@@ -37,9 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading && user) {
       const currentPath = window.location.pathname
+      // Only redirect from auth pages, not from admin pages
       if (currentPath === "/login" || currentPath === "/signup") {
         if (user.role === "ADMIN") {
           router.push("/admin")
+        } else if (user.role === "RESTAURANT_OWNER") {
+          router.push("/restaurant-admin")
         } else {
           router.push("/")
         }
@@ -65,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function login(phone: string, password: string) {
+  async function login(phone: string, password: string): Promise<boolean> {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -80,12 +83,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await response.json()
     setUser(data.user)
     
-    // Redirect admin users to admin dashboard, regular users to home page
+    // Redirect users to appropriate dashboard based on role
     if (data.user.role === "ADMIN") {
       router.push("/admin")
+    } else if (data.user.role === "RESTAURANT_OWNER") {
+      router.push("/restaurant-admin")
     } else {
       router.push("/")
     }
+    
+    return true
   }
 
   async function signup(phone: string, password: string, name: string, email?: string) {
@@ -103,9 +110,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await response.json()
     setUser(data.user)
     
-    // Redirect admin users to admin dashboard, regular users to home page
+    // Redirect users to appropriate dashboard based on role
     if (data.user.role === "ADMIN") {
       router.push("/admin")
+    } else if (data.user.role === "RESTAURANT_OWNER") {
+      router.push("/restaurant-admin")
     } else {
       router.push("/")
     }

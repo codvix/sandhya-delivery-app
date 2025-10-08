@@ -20,6 +20,7 @@ model User {
   orders    Order[]
   addresses Address[]
   restaurants Restaurant[]
+  notifications UserNotification[]
 }
 
 model Address {
@@ -152,6 +153,7 @@ model OrderItem {
 enum Role {
   USER
   ADMIN
+  RESTAURANT_OWNER
 }
 
 enum OrderStatus {
@@ -183,4 +185,46 @@ model Invoice {
   invoiceNumber  String   @unique
   amount         Int      // in cents
   createdAt      DateTime @default(now())
+}
+
+model Banner {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  image       String
+  link        String?  // Optional link when banner is clicked
+  isActive    Boolean  @default(true)
+  order       Int      @default(0) // For ordering banners
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AdminNotification {
+  id           String   @id @default(cuid())
+  type         String   // 'new_order', 'order_status_change', etc.
+  title        String
+  message      String
+  orderId      String?  // Reference to order if applicable
+  orderNumber  String?  // Order number for display
+  status       String?  // Order status
+  read         Boolean  @default(false)
+  restaurantName String?
+  customerName String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model UserNotification {
+  id           String   @id @default(cuid())
+  userId       String   // Reference to user
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         String   // 'order_status', 'order_created', 'order_delivered', etc.
+  title        String
+  message      String
+  orderId      String?  // Reference to order if applicable
+  orderNumber  String?  // Order number for display
+  status       String?  // Order status
+  read         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

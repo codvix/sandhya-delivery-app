@@ -1,117 +1,188 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { calculateDistance, calculateDeliveryFee, isDeliveryPossible } from "@/lib/utils/distance"
 
 interface CartItem {
-  menuItemId: string
-  quantity: number
+  id: string
+  name: string
+  price: number
+  image: string | null
   restaurantId: string
+  restaurantName: string
+  quantity: number
+}
+
+interface RestaurantData {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+}
+
+interface UserLocation {
+  latitude: number
+  longitude: number
 }
 
 interface CartContextType {
-  cart: CartItem[]
-  addToCart: (menuItemId: string, restaurantId: string) => void
-  removeFromCart: (menuItemId: string, restaurantId: string) => void
-  getItemQuantity: (menuItemId: string, restaurantId: string) => number
+  items: CartItem[]
+  restaurantData: RestaurantData | null
+  userLocation: UserLocation | null
+  deliveryDistance: number | null
+  isDeliveryAvailable: boolean
+  addToCart: (item: Omit<CartItem, 'quantity'>) => void
+  updateQuantity: (itemId: string, quantity: number) => void
+  removeItem: (itemId: string) => void
+  setRestaurantData: (data: RestaurantData) => void
+  setUserLocation: (location: UserLocation) => void
   getTotalItems: () => number
-  clearCart: (restaurantId?: string) => void
-  getCartForRestaurant: (restaurantId: string) => CartItem[]
+  getTotalPrice: () => number
+  getDeliveryFee: () => number
+  getTax: () => number
+  getTotal: () => number
+  clearCart: () => void
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([])
+  const [items, setItems] = useState<CartItem[]>([])
+  const [restaurantData, setRestaurantDataState] = useState<RestaurantData | null>(null)
+  const [userLocation, setUserLocationState] = useState<UserLocation | null>(null)
+  const [deliveryDistance, setDeliveryDistance] = useState<number | null>(null)
+  const [isDeliveryAvailable, setIsDeliveryAvailable] = useState(true)
 
   // Load cart from localStorage on mount
   useEffect(() => {
     const savedCart = localStorage.getItem("global_cart")
     if (savedCart) {
       try {
-        setCart(JSON.parse(savedCart))
+        setItems(JSON.parse(savedCart))
       } catch (error) {
         console.error("Error parsing saved cart:", error)
-        setCart([])
+        setItems([])
       }
     }
   }, [])
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("global_cart", JSON.stringify(cart))
-  }, [cart])
+    localStorage.setItem("global_cart", JSON.stringify(items))
+  }, [items])
 
-  const addToCart = (menuItemId: string, restaurantId: string) => {
-    setCart(prevCart => {
-      const existingItem = prevCart.find(
-        item => item.menuItemId === menuItemId && item.restaurantId === restaurantId
-      )
+  // Calculate distance when both user location and restaurant data are available
+  useEffect(() => {
+    if (userLocation && restaurantData) {
+      const distance = calculateDistance(userLocation, {
+        latitude: restaurantData.latitude,
+        longitude: restaurantData.longitude
+      })
+      setDeliveryDistance(distance)
+      setIsDeliveryAvailable(isDeliveryPossible(distance))
+    }
+  }, [userLocation, restaurantData])
+
+  const addToCart = (newItem: Omit<CartItem, 'quantity'>) => {
+    setItems(prevItems => {
+      const existingItem = prevItems.find(item => item.id === newItem.id)
       
       if (existingItem) {
-        return prevCart.map(item =>
-          item.menuItemId === menuItemId && item.restaurantId === restaurantId
+        return prevItems.map(item =>
+          item.id === newItem.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
       } else {
-        return [...prevCart, { menuItemId, quantity: 1, restaurantId }]
+        return [...prevItems, { ...newItem, quantity: 1 }]
       }
     })
   }
 
-  const removeFromCart = (menuItemId: string, restaurantId: string) => {
-    setCart(prevCart => {
-      const existingItem = prevCart.find(
-        item => item.menuItemId === menuItemId && item.restaurantId === restaurantId
+  const updateQuantity = (itemId: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeItem(itemId)
+      return
+    }
+    
+    setItems(prevItems =>
+      prevItems.map(item =>
+        item.id === itemId
+          ? { ...item, quantity }
+          : item
       )
-      
-      if (existingItem && existingItem.quantity > 1) {
-        return prevCart.map(item =>
-          item.menuItemId === menuItemId && item.restaurantId === restaurantId
-            ? { ...item, quantity: item.quantity - 1 }
-            : item
-        )
-      } else {
-        return prevCart.filter(
-          item => !(item.menuItemId === menuItemId && item.restaurantId === restaurantId)
-        )
-      }
-    })
+    )
   }
 
-  const getItemQuantity = (menuItemId: string, restaurantId: string): number => {
-    const item = cart.find(
-      item => item.menuItemId === menuItemId && item.restaurantId === restaurantId
-    )
-    return item?.quantity || 0
+  const removeItem = (itemId: string) => {
+    setItems(prevItems => prevItems.filter(item => item.id !== itemId))
   }
 
   const getTotalItems = (): number => {
-    return cart.reduce((sum, item) => sum + item.quantity, 0)
+    return items.reduce((sum, item) => sum + item.quantity, 0)
   }
 
-  const clearCart = (restaurantId?: string) => {
-    if (restaurantId) {
-      setCart(prevCart => prevCart.filter(item => item.restaurantId !== restaurantId))
-    } else {
-      setCart([])
+  const getTotalPrice = (): number => {
+    return items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  }
+
+  const getDeliveryFee = (): number => {
+    const subtotal = getTotalPrice()
+    
+    // Free delivery for orders ≥₹199
+    if (subtotal >= 19900) {
+      return 0
     }
+    
+    // If we have distance data, calculate accurate delivery fee
+    if (deliveryDistance !== null) {
+      return calculateDeliveryFee(deliveryDistance, subtotal)
+    }
+    
+    // Fallback: show estimated fee if distance not available
+    return 1000 // ₹10 base fee
   }
 
-  const getCartForRestaurant = (restaurantId: string): CartItem[] => {
-    return cart.filter(item => item.restaurantId === restaurantId)
+  const getTax = (): number => {
+    const subtotal = getTotalPrice()
+    return Math.round(subtotal * 0.05) // 5% tax
+  }
+
+  const getTotal = (): number => {
+    return getTotalPrice() + getDeliveryFee() + getTax()
+  }
+
+  const clearCart = () => {
+    setItems([])
+  }
+
+  const setRestaurantData = (data: RestaurantData) => {
+    setRestaurantDataState(data)
+  }
+
+  const setUserLocation = (location: UserLocation) => {
+    setUserLocationState(location)
   }
 
   return (
     <CartContext.Provider
       value={{
-        cart,
+        items,
+        restaurantData,
+        userLocation,
+        deliveryDistance,
+        isDeliveryAvailable,
         addToCart,
-        removeFromCart,
-        getItemQuantity,
+        updateQuantity,
+        removeItem,
+        setRestaurantData,
+        setUserLocation,
         getTotalItems,
+        getTotalPrice,
+        getDeliveryFee,
+        getTax,
+        getTotal,
         clearCart,
-        getCartForRestaurant,
       }}
     >
       {children}

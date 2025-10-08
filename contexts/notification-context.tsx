@@ -34,19 +34,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const unreadCount = notifications.filter(n => !n.read).length
 
-  // Load notifications and last order statuses from localStorage on mount
+  // Load notifications from database on mount
   useEffect(() => {
     if (user) {
-      // Load notifications
-      const stored = localStorage.getItem(`notifications_${user.id}`)
-      if (stored) {
-        try {
-          setNotifications(JSON.parse(stored))
-        } catch (error) {
-          console.error('Failed to parse stored notifications:', error)
-        }
-      }
-
+      loadNotifications()
+      
       // Load last order statuses to prevent duplicate notifications
       const storedStatuses = localStorage.getItem(`lastOrderStatuses_${user.id}`)
       if (storedStatuses) {
@@ -59,19 +51,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [user])
 
-  // Save notifications to localStorage whenever they change
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(`notifications_${user.id}`, JSON.stringify(notifications))
+  const loadNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications')
+      if (response.ok) {
+        const data = await response.json()
+        setNotifications(data)
+      }
+    } catch (error) {
+      console.error('Failed to load notifications:', error)
     }
-  }, [notifications, user])
-
-  // Save last order statuses to localStorage whenever they change
-  useEffect(() => {
-    if (user && Object.keys(lastOrderStatusesRef.current).length > 0) {
-      localStorage.setItem(`lastOrderStatuses_${user.id}`, JSON.stringify(lastOrderStatusesRef.current))
-    }
-  }, [user])
+  }
 
   // Poll for order status updates
   useEffect(() => {
@@ -88,8 +78,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           orders.forEach((order: any) => {
             const lastStatus = lastOrderStatusesRef.current[order.id]
             
-            // Only create notification if status changed
-            if (lastStatus !== order.status) {
+            // Only create notification if status changed and it's not the initial load
+            if (lastStatus !== order.status && lastStatus !== undefined) {
               const statusMessages = {
                 'CONFIRMED': 'Your order has been confirmed and is being prepared',
                 'PREPARING': 'Your order is being prepared by the restaurant',
@@ -110,10 +100,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                   read: false
                 })
               }
-              
-              // Update the last known status
-              lastOrderStatusesRef.current[order.id] = order.status
             }
+            
+            // Update the last known status
+            lastOrderStatusesRef.current[order.id] = order.status
           })
         }
       } catch (error) {
@@ -124,13 +114,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     // Poll every 30 seconds
     const interval = setInterval(pollOrders, 30000)
     
-    // Initial poll
+    // Initial poll (this will set the baseline statuses without creating notifications)
     pollOrders()
 
     return () => clearInterval(interval)
   }, [user])
 
-  const addNotification = (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => {
+  const addNotification = async (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => {
     // Check for duplicate notifications based on orderId and status
     const isDuplicate = notifications.some(n => 
       n.orderId === notification.orderId && 
@@ -143,61 +133,93 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       return
     }
 
-    const newNotification: Notification = {
-      ...notification,
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      read: false,
-      createdAt: new Date().toISOString()
-    }
-    
-    setNotifications(prev => [newNotification, ...prev])
-    
-    // Play notification sound
     try {
-      const audio = new Audio('/sounds/happy-bells-notification-937.wav')
-      audio.volume = 0.8
-      audio.play().catch(() => {}) // Ignore autoplay errors
-    } catch (error) {
-      // Ignore audio errors
-    }
-  }
+      const response = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(notification)
+      })
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
-    )
-  }
-
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  }
-
-  const clearNotifications = () => {
-    setNotifications([])
-    if (user) {
-      localStorage.removeItem(`notifications_${user.id}`)
-      localStorage.removeItem(`lastOrderStatuses_${user.id}`)
-    }
-  }
-
-  // Clean up old notifications (keep only last 50)
-  const cleanupOldNotifications = () => {
-    setNotifications(prev => {
-      if (prev.length > 50) {
-        // Keep only the 50 most recent notifications
-        const sorted = prev.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        return sorted.slice(0, 50)
+      if (response.ok) {
+        const newNotification = await response.json()
+        setNotifications(prev => [newNotification, ...prev])
+        
+        // Play notification sound
+        try {
+          const audio = new Audio('/sounds/happy-bells-notification-937.wav')
+          audio.volume = 0.8
+          audio.play().catch(() => {}) // Ignore autoplay errors
+        } catch (error) {
+          // Ignore audio errors
+        }
       }
-      return prev
-    })
+    } catch (error) {
+      console.error('Failed to add notification:', error)
+    }
   }
 
-  // Clean up old notifications when they exceed 50
-  useEffect(() => {
-    if (notifications.length > 50) {
-      cleanupOldNotifications()
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notificationId,
+          read: true
+        })
+      })
+
+      if (response.ok) {
+        setNotifications(prev => 
+          prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+        )
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error)
     }
-  }, [notifications.length])
+  }
+
+  const markAllAsRead = async () => {
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          read: true
+        })
+      })
+
+      if (response.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      }
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error)
+    }
+  }
+
+  const clearNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications', {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setNotifications([])
+        if (user) {
+          localStorage.removeItem(`lastOrderStatuses_${user.id}`)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to clear notifications:', error)
+    }
+  }
+
 
   return (
     <NotificationContext.Provider value={{
