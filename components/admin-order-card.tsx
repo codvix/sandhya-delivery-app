@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { getOrderStatusColor, getOrderStatusLabel } from "@/lib/utils/order"
 import { formatCurrency } from "@/lib/utils/currency"
-import { FeeManager } from "@/lib/fees"
 import { Phone, MapPin, Eye, Package, User, Calendar, CreditCard } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import Image from "next/image"
@@ -38,9 +37,21 @@ interface AdminOrderCardProps {
     city: string
   }
   status: string
+  subtotal: number
+  deliveryFee: number
+  tax: number
+  tip: number
+  discount: number
   total: number
   createdAt: string
   items: OrderItem[]
+  coupon?: {
+    id: string
+    code: string
+    name: string
+    type: string
+    value: number
+  } | null
   onStatusChange: (orderId: string, newStatus: string) => void
   onDeliveryLevelChange?: (orderId: string, newLevel: string) => void
   onGenerateInvoice?: (orderId: string) => void
@@ -53,27 +64,21 @@ export function AdminOrderCard({
   restaurant,
   address,
   status,
+  subtotal,
+  deliveryFee,
+  tax,
+  tip,
+  discount,
   total,
   createdAt,
   items,
+  coupon,
   onStatusChange,
   onDeliveryLevelChange,
   onGenerateInvoice,
 }: AdminOrderCardProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const itemCount = items?.length ?? 0
-  const subtotal = items?.reduce((sum, item) => sum + (item.price * item.quantity), 0) ?? 0
-  
-  // Create a local fee manager instance
-  const feeManager = new FeeManager()
-  const deliveryFee = feeManager.getDeliveryFee({
-    subtotal,
-    deliveryLevel: 'STANDARD'
-  })
-  const tax = feeManager.getTaxAmount({
-    subtotal,
-    deliveryLevel: 'STANDARD'
-  })
 
   return (
     <Card className="overflow-hidden">
@@ -219,6 +224,20 @@ export function AdminOrderCard({
                             <span className="text-muted-foreground">Tax</span>
                             <span>{formatCurrency(tax)}</span>
                           </div>
+                          {tip > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Tip</span>
+                              <span>{formatCurrency(tip)}</span>
+                            </div>
+                          )}
+                          {discount > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">
+                                Discount{coupon ? ` (${coupon.code})` : ''}
+                              </span>
+                              <span className="text-green-600">-{formatCurrency(discount)}</span>
+                            </div>
+                          )}
                           <Separator />
                           <div className="flex justify-between font-bold text-base">
                             <span>Total</span>

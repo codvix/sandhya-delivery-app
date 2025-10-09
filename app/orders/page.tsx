@@ -22,6 +22,11 @@ interface Order {
   }
   status: string
   total: number
+  discount?: number
+  coupon?: {
+    code: string
+    name: string
+  } | null
   createdAt: string
   items: Array<{
     id: string
@@ -191,6 +196,8 @@ export default function OrdersPage() {
                 total={order.total}
                 createdAt={order.createdAt}
                 itemCount={order.items.length}
+                discount={order.discount}
+                coupon={order.coupon}
               />
             ))}
           </div>

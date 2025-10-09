@@ -13,6 +13,7 @@ import { LoadingSpinner } from "@/components/loading-spinner"
 import { AddressSelector } from "@/components/address-selector"
 import { TipGuidance } from "@/components/tip-guidance"
 import { DeliveryFreeGuidance } from "@/components/delivery-free-guidance"
+import { CouponInput } from "@/components/coupon-input"
 import { Minus, Plus, Trash2, MapPin, Clock, CreditCard } from "lucide-react"
 import Image from "next/image"
 import { formatCurrency } from "@/lib/utils/currency"
@@ -24,9 +25,11 @@ export default function CartPage() {
     userLocation,
     deliveryDistance,
     isDeliveryAvailable,
+    appliedCoupon,
     getTotalPrice, 
     getDeliveryFee, 
     getTax, 
+    getDiscount,
     getTotal, 
     updateQuantity, 
     removeItem,
@@ -114,7 +117,8 @@ export default function CartPage() {
           price: item.price
         })),
         tip: tip,
-        paymentMethod: "COD"
+        paymentMethod: "COD",
+        couponCode: appliedCoupon?.code
       }
 
       const response = await fetch("/api/orders", {
@@ -170,6 +174,7 @@ export default function CartPage() {
   const subtotal = getTotalPrice()
   const deliveryFee = getDeliveryFee()
   const tax = getTax()
+  const discount = getDiscount()
   const total = getTotal() + tip
 
   return (
@@ -259,6 +264,9 @@ export default function CartPage() {
             </CardContent>
           </Card>
 
+          {/* Coupon Input */}
+          <CouponInput />
+
           {/* Tip Selection */}
           <Card>
             <CardHeader>
@@ -301,6 +309,12 @@ export default function CartPage() {
                 <span>Tax</span>
                 <span>{formatCurrency(tax)}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount ({appliedCoupon?.code})</span>
+                  <span>-{formatCurrency(discount)}</span>
+                </div>
+              )}
               {tip > 0 && (
                 <div className="flex justify-between">
                   <span>Tip</span>

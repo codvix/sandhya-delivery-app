@@ -25,21 +25,32 @@ interface UserLocation {
   longitude: number
 }
 
+interface CouponDiscount {
+  couponId: string
+  code: string
+  name: string
+  discountAmount: number
+}
+
 interface CartContextType {
   items: CartItem[]
   restaurantData: RestaurantData | null
   userLocation: UserLocation | null
   deliveryDistance: number | null
   isDeliveryAvailable: boolean
+  appliedCoupon: CouponDiscount | null
   addToCart: (item: Omit<CartItem, 'quantity'>) => void
   updateQuantity: (itemId: string, quantity: number) => void
   removeItem: (itemId: string) => void
   setRestaurantData: (data: RestaurantData) => void
   setUserLocation: (location: UserLocation) => void
+  applyCoupon: (couponCode: string) => Promise<{ success: boolean; error?: string }>
+  removeCoupon: () => void
   getTotalItems: () => number
   getTotalPrice: () => number
   getDeliveryFee: () => number
   getTax: () => number
+  getDiscount: () => number
   getTotal: () => number
   clearCart: () => void
 }
@@ -52,6 +63,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [userLocation, setUserLocationState] = useState<UserLocation | null>(null)
   const [deliveryDistance, setDeliveryDistance] = useState<number | null>(null)
   const [isDeliveryAvailable, setIsDeliveryAvailable] = useState(true)
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponDiscount | null>(null)
 
   // Load cart from localStorage on mount
   useEffect(() => {
@@ -148,12 +160,58 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return Math.round(subtotal * 0.05) // 5% tax
   }
 
+  const getDiscount = (): number => {
+    return appliedCoupon?.discountAmount || 0
+  }
+
   const getTotal = (): number => {
-    return getTotalPrice() + getDeliveryFee() + getTax()
+    return getTotalPrice() + getDeliveryFee() + getTax() - getDiscount()
   }
 
   const clearCart = () => {
     setItems([])
+    setAppliedCoupon(null)
+  }
+
+  const applyCoupon = async (couponCode: string): Promise<{ success: boolean; error?: string }> => {
+    if (!restaurantData || items.length === 0) {
+      return { success: false, error: "No items in cart" }
+    }
+
+    try {
+      const response = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code: couponCode,
+          restaurantId: restaurantData.id,
+          subtotal: getTotalPrice(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.valid) {
+        setAppliedCoupon({
+          couponId: data.coupon.id,
+          code: data.coupon.code,
+          name: data.coupon.name,
+          discountAmount: data.coupon.discountAmount,
+        })
+        return { success: true }
+      } else {
+        return { success: false, error: data.error || "Invalid coupon" }
+      }
+    } catch (error) {
+      console.error("Failed to validate coupon:", error)
+      return { success: false, error: "Failed to validate coupon" }
+    }
+  }
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null)
   }
 
   const setRestaurantData = (data: RestaurantData) => {
@@ -172,15 +230,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
         userLocation,
         deliveryDistance,
         isDeliveryAvailable,
+        appliedCoupon,
         addToCart,
         updateQuantity,
         removeItem,
         setRestaurantData,
         setUserLocation,
+        applyCoupon,
+        removeCoupon,
         getTotalItems,
         getTotalPrice,
         getDeliveryFee,
         getTax,
+        getDiscount,
         getTotal,
         clearCart,
       }}

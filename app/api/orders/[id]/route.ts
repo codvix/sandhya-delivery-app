@@ -61,6 +61,15 @@ export async function GET(
             },
           },
         },
+        coupon: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            type: true,
+            value: true,
+          },
+        },
       },
     })
 

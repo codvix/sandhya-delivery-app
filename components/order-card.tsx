@@ -16,9 +16,14 @@ interface OrderCardProps {
   total: number
   createdAt: string
   itemCount: number
+  discount?: number
+  coupon?: {
+    code: string
+    name: string
+  } | null
 }
 
-export function OrderCard({ id, orderNumber, restaurant, status, total, createdAt, itemCount }: OrderCardProps) {
+export function OrderCard({ id, orderNumber, restaurant, status, total, createdAt, itemCount, discount, coupon }: OrderCardProps) {
   return (
     <Link href={`/orders/${id}`}>
       <Card className="hover:shadow-lg transition-shadow cursor-pointer mt-2">
@@ -43,8 +48,20 @@ export function OrderCard({ id, orderNumber, restaurant, status, total, createdA
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
                   {itemCount} {itemCount === 1 ? "item" : "items"}
+                  {coupon && (
+                    <span className="ml-2 text-green-600 font-medium">
+                      • {coupon.code}
+                    </span>
+                  )}
                 </span>
-                <span className="font-semibold">{formatCurrency(total)}</span>
+                <div className="text-right">
+                  {discount && discount > 0 && (
+                    <div className="text-xs text-green-600">
+                      -{formatCurrency(discount)} off
+                    </div>
+                  )}
+                  <span className="font-semibold">{formatCurrency(total)}</span>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2">{new Date(createdAt).toLocaleString()}</p>
             </div>

@@ -32,12 +32,20 @@ interface Order {
   deliveryFee: number
   tax: number
   tip: number
+  discount: number
   total: number
   paymentMethod: string
   paymentStatus: string
   specialInstructions: string | null
   createdAt: string
   updatedAt: string
+  coupon?: {
+    id: string
+    code: string
+    name: string
+    type: string
+    value: number
+  } | null
   user: {
     id: string
     name: string
@@ -205,7 +213,11 @@ export default function OrderDetailsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <OrderStatusTimeline status={order.status} />
+              <OrderStatusTimeline 
+                status={order.status} 
+                createdAt={order.createdAt} 
+                updatedAt={order.updatedAt} 
+              />
             </CardContent>
           </Card>
 
@@ -279,9 +291,7 @@ export default function OrderDetailsPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-medium">{item.menuItem.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {item.menuItem.description}
-                    </p>
+                  
                     <div className="flex items-center space-x-2 mt-1">
                       <Badge variant={item.menuItem.isVeg ? "default" : "destructive"}>
                         {item.menuItem.isVeg ? "Veg" : "Non-Veg"}
@@ -324,6 +334,19 @@ export default function OrderDetailsPage() {
                 <span>Subtotal</span>
                 <span>{formatCurrency(order.subtotal)}</span>
               </div>
+              {order.discount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span className="flex items-center gap-1">
+                    Discount
+                    {order.coupon && (
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                        {order.coupon.code}
+                      </span>
+                    )}
+                  </span>
+                  <span>-{formatCurrency(order.discount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Delivery Fee</span>
                 <span>{formatCurrency(order.deliveryFee)}</span>

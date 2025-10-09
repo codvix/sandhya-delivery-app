@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/session"
 import { calculateDistance, calculateDeliveryFee, isDeliveryPossible } from "@/lib/utils/distance"
+import { validateCoupon, applyCouponToOrder } from "@/lib/utils/coupon"
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,6 +43,12 @@ export async function GET(request: NextRequest) {
             },
           },
         },
+        coupon: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { restaurantId, addressId, items, tip, paymentMethod } = await request.json()
+    const { restaurantId, addressId, items, tip, paymentMethod, couponCode } = await request.json()
 
     if (!restaurantId || !addressId || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -168,7 +175,32 @@ export async function POST(request: NextRequest) {
     // Calculate tax (simplified - 5% tax)
     const tax = Math.round(subtotal * 0.05)
     
-    const total = subtotal + deliveryFee + tax + (tip || 0)
+    // Validate and apply coupon if provided
+    let discount = 0
+    let couponId = null
+    
+    if (couponCode) {
+      const couponValidation = await validateCoupon(
+        couponCode,
+        user.id,
+        restaurantId,
+        subtotal
+      )
+      
+      if (!couponValidation.valid) {
+        return NextResponse.json(
+          { error: couponValidation.error },
+          { status: 400 }
+        )
+      }
+      
+      if (couponValidation.coupon) {
+        discount = couponValidation.coupon.discountAmount
+        couponId = couponValidation.coupon.id
+      }
+    }
+    
+    const total = subtotal + deliveryFee + tax + (tip || 0) - discount
 
     // Generate order number
     const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
@@ -184,6 +216,8 @@ export async function POST(request: NextRequest) {
         deliveryFee,
         tax,
         tip: tip || 0,
+        couponId,
+        discount,
         total,
         paymentMethod: paymentMethod || "COD",
         items: {
@@ -219,6 +253,16 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // Apply coupon usage if coupon was used
+    if (couponId && discount > 0) {
+      try {
+        await applyCouponToOrder(order.id, couponId, user.id, discount)
+      } catch (couponError) {
+        console.error('Failed to apply coupon usage:', couponError)
+        // Don't fail the order creation if coupon usage tracking fails
+      }
+    }
 
     // Create customer notification for new order
     try {

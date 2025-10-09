@@ -21,6 +21,7 @@ model User {
   addresses Address[]
   restaurants Restaurant[]
   notifications UserNotification[]
+  couponUsages CouponUsage[]
 }
 
 model Address {
@@ -122,6 +123,9 @@ model Order {
   deliveryFee  Int         // in cents
   tax          Int         // in cents
   tip          Int         @default(0) // in cents
+  couponId     String?     // Optional coupon applied
+  coupon       Coupon?     @relation(fields: [couponId], references: [id])
+  discount     Int         @default(0) // Discount amount in cents
   total        Int         // in cents
   
   paymentMethod String     // COD, CARD, UPI
@@ -134,6 +138,7 @@ model Order {
   
   items        OrderItem[]
   invoice      Invoice?
+  couponUsages CouponUsage[]
 }
 
 model OrderItem {
@@ -227,4 +232,43 @@ model UserNotification {
   read         Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Coupon {
+  id              String      @id @default(cuid())
+  code            String      @unique
+  name            String
+  description     String?
+  type            CouponType  @default(PERCENTAGE)
+  value           Int         // Percentage (1-100) or fixed amount in cents
+  minOrderAmount  Int?        // Minimum order amount in cents
+  maxDiscount     Int?        // Maximum discount amount in cents (for percentage coupons)
+  usageLimit      Int?        // Total usage limit (null = unlimited)
+  usedCount       Int         @default(0)
+  isActive        Boolean     @default(true)
+  validFrom       DateTime    @default(now())
+  validUntil      DateTime?
+  applicableTo    String?     // Restaurant ID (null = all restaurants)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  orders          Order[]
+  couponUsages    CouponUsage[]
+}
+
+model CouponUsage {
+  id        String   @id @default(cuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  discountAmount Int // Amount saved in cents
+  createdAt DateTime @default(now())
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
 }

@@ -9,6 +9,7 @@ import { UserStats } from "@/components/user-stats"
 import { MenuItemManagement } from "@/components/menu-item-management"
 import { CategoryManagement } from "@/components/category-management"
 import { RestaurantSettings } from "@/components/restaurant-settings"
+import { CouponManagement } from "@/components/coupon-management"
 import { AdminNotificationBell } from "@/components/admin-notification-bell"
 import { NewOrderPopup } from "@/components/new-order-popup"
 import { Button } from "@/components/ui/button"
@@ -57,15 +58,30 @@ interface Order {
     zipCode: string
   }
   status: string
+  subtotal: number
+  deliveryFee: number
+  tax: number
+  tip: number
+  discount: number
   total: number
   createdAt: string
   items: Array<{
     id: string
+    price: number
+    quantity: number
     menuItem: {
       name: string
+      image: string | null
+      isVeg: boolean
     }
-    quantity: number
   }>
+  coupon?: {
+    id: string
+    code: string
+    name: string
+    type: string
+    value: number
+  } | null
 }
 
 interface Stats {
@@ -344,7 +360,7 @@ export default function AdminPage() {
 
         {/* Main Management Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">
               <Package className="h-4 w-4 mr-2" />
               Overview
@@ -360,6 +376,10 @@ export default function AdminPage() {
             <TabsTrigger value="categories">
               <Tag className="h-4 w-4 mr-2" />
               Categories
+            </TabsTrigger>
+            <TabsTrigger value="coupons">
+              <Tag className="h-4 w-4 mr-2" />
+              Coupons
             </TabsTrigger>
             <TabsTrigger value="settings">
               <Settings className="h-4 w-4 mr-2" />
@@ -422,16 +442,22 @@ export default function AdminPage() {
                         city: order.address.city
                       }}
                       status={order.status}
+                      subtotal={order.subtotal}
+                      deliveryFee={order.deliveryFee}
+                      tax={order.tax}
+                      tip={order.tip}
+                      discount={order.discount}
                       total={order.total}
                       createdAt={order.createdAt}
-                      items={order.items.map((item: any) => ({
+                      items={order.items.map((item) => ({
                         id: item.id,
                         name: item.menuItem.name,
                         price: item.price,
                         quantity: item.quantity,
-                        image: undefined,
-                        isVeg: true
+                        image: item.menuItem.image || undefined,
+                        isVeg: item.menuItem.isVeg
                       }))}
+                      coupon={order.coupon}
                       onStatusChange={handleStatusUpdate}
                     />
                     ))}
@@ -547,6 +573,10 @@ export default function AdminPage() {
 
           <TabsContent value="categories" className="mt-6">
             <CategoryManagement />
+          </TabsContent>
+
+          <TabsContent value="coupons" className="mt-6">
+            <CouponManagement />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">

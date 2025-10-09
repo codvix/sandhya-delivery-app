@@ -58,7 +58,7 @@ export async function GET(
             },
           },
         },
-      },
+      } as any,
     })
 
     if (!order) {
@@ -68,7 +68,27 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(order)
+    // Fetch coupon data if exists
+    let coupon = null
+    if ((order as any).couponId) {
+      coupon = await prisma.coupon.findUnique({
+        where: { id: (order as any).couponId },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
+          value: true,
+        },
+      })
+    }
+
+    const orderWithCoupon = {
+      ...order,
+      coupon,
+    }
+
+    return NextResponse.json(orderWithCoupon)
   } catch (error) {
     console.error("Failed to fetch admin order:", error)
     return NextResponse.json(
