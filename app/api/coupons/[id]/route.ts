@@ -6,9 +6,10 @@ import { getCurrentUser } from "@/lib/session"
 // GET /api/coupons/[id] - Get specific coupon
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await getCurrentUser(request)
     if (!user) {
       return NextResponse.json(
@@ -18,7 +19,7 @@ export async function GET(
     }
 
     const coupon = await prisma.coupon.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       include: {
         _count: {
           select: { couponUsages: true }
@@ -46,9 +47,10 @@ export async function GET(
 // PUT /api/coupons/[id] - Update coupon (admin only)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await getCurrentUser(request)
     if (!user || user.role !== 'ADMIN') {
       return NextResponse.json(
@@ -86,7 +88,7 @@ export async function PUT(
     }
 
     const coupon = await prisma.coupon.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         name,
         description,
@@ -114,9 +116,10 @@ export async function PUT(
 // DELETE /api/coupons/[id] - Delete coupon (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await getCurrentUser(request)
     if (!user || user.role !== 'ADMIN') {
       return NextResponse.json(
@@ -126,7 +129,7 @@ export async function DELETE(
     }
 
     await prisma.coupon.delete({
-      where: { id: params.id }
+      where: { id: id }
     })
 
     return NextResponse.json({ message: "Coupon deleted successfully" })
