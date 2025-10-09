@@ -220,6 +220,24 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Create customer notification for new order
+    try {
+      await prisma.userNotification.create({
+        data: {
+          userId: user.id,
+          type: 'order_created',
+          title: 'Order Placed Successfully!',
+          message: `Your order #${order.orderNumber} has been placed and is being processed`,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          status: 'PENDING',
+        },
+      })
+    } catch (notificationError) {
+      console.error('Failed to create order confirmation notification:', notificationError)
+      // Don't fail the order creation if notification creation fails
+    }
+
     return NextResponse.json(order, { status: 201 })
   } catch (error) {
     console.error("Failed to create order:", error)

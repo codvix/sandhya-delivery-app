@@ -3,6 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 import { useAuth } from "./auth-context"
+import { playNotificationSound } from "@/lib/audio"
 
 interface AdminNotification {
   id: string
@@ -109,13 +110,7 @@ export function AdminNotificationProvider({ children }: { children: React.ReactN
                   setShowNewOrderPopup(true)
                   
                   // Play notification sound
-                  try {
-                    const audio = new Audio('/sounds/happy-bells-notification-937.wav')
-                    audio.volume = 0.8
-                    audio.play().catch(() => {}) // Ignore autoplay errors
-                  } catch (error) {
-                    // Ignore audio errors
-                  }
+                  playNotificationSound()
                 }
               } catch (error) {
                 console.error('Failed to create notification:', error)
@@ -155,13 +150,7 @@ export function AdminNotificationProvider({ children }: { children: React.ReactN
         setNotifications(prev => [newNotification, ...prev])
         
         // Play notification sound
-        try {
-          const audio = new Audio('/sounds/happy-bells-notification-937.wav')
-          audio.volume = 0.8
-          audio.play().catch(() => {}) // Ignore autoplay errors
-        } catch (error) {
-          // Ignore audio errors
-        }
+        playNotificationSound()
       }
     } catch (error) {
       console.error('Failed to add notification:', error)

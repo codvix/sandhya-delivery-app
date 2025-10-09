@@ -157,6 +157,35 @@ export async function PATCH(
       },
     })
 
+    // Create customer notification for order status change
+    try {
+      const statusMessages = {
+        'CONFIRMED': 'Your order has been confirmed and is being prepared',
+        'PREPARING': 'Your order is being prepared by the restaurant',
+        'OUT_FOR_DELIVERY': 'Your order is out for delivery',
+        'DELIVERED': 'Your order has been delivered!',
+        'CANCELLED': 'Your order has been cancelled'
+      }
+
+      const message = statusMessages[status as keyof typeof statusMessages]
+      if (message) {
+        await prisma.userNotification.create({
+          data: {
+            userId: order.user.id,
+            type: 'order_status',
+            title: `Order #${order.orderNumber} Update`,
+            message,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            status: status,
+          },
+        })
+      }
+    } catch (notificationError) {
+      console.error('Failed to create customer notification:', notificationError)
+      // Don't fail the order update if notification creation fails
+    }
+
     return NextResponse.json(order)
   } catch (error) {
     console.error("Failed to update order status:", error)

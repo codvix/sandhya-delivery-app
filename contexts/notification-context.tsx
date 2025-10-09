@@ -4,6 +4,7 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useRef } from "react"
 import { useAuth } from "./auth-context"
+import { playNotificationSound } from "@/lib/audio"
 
 interface Notification {
   id: string
@@ -64,62 +65,47 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }
 
-  // Poll for order status updates
+  // Poll for new notifications (more efficient than polling orders)
   useEffect(() => {
     if (!user) return
 
-    const pollOrders = async () => {
+    const pollNotifications = async () => {
       try {
-        const response = await fetch('/api/orders')
+        const response = await fetch('/api/notifications')
         if (response.ok) {
           const data = await response.json()
-          const orders = data.orders || []
+          const newNotifications = data || []
           
-          // Check for status changes and create notifications
-          orders.forEach((order: any) => {
-            const lastStatus = lastOrderStatusesRef.current[order.id]
-            
-            // Only create notification if status changed and it's not the initial load
-            if (lastStatus !== order.status && lastStatus !== undefined) {
-              const statusMessages = {
-                'CONFIRMED': 'Your order has been confirmed and is being prepared',
-                'PREPARING': 'Your order is being prepared by the restaurant',
-                'OUT_FOR_DELIVERY': 'Your order is out for delivery',
-                'DELIVERED': 'Your order has been delivered!',
-                'CANCELLED': 'Your order has been cancelled'
-              }
-              
-              const message = statusMessages[order.status as keyof typeof statusMessages]
-              if (message) {
-                addNotification({
-                  type: 'order_status',
-                  title: `Order #${order.orderNumber} Update`,
-                  message,
-                  orderId: order.id,
-                  orderNumber: order.orderNumber,
-                  status: order.status,
-                  read: false
-                })
-              }
-            }
-            
-            // Update the last known status
-            lastOrderStatusesRef.current[order.id] = order.status
-          })
+          // Check for new notifications and play sound
+          const previousNotificationIds = new Set(notifications.map(n => n.id))
+          const newNotificationIds = new Set(newNotifications.map((n: any) => n.id))
+          
+          // Find notifications that are new (not in previous set)
+          const trulyNewNotifications = newNotifications.filter((n: any) => 
+            !previousNotificationIds.has(n.id)
+          )
+          
+          // Play sound for new notifications
+          if (trulyNewNotifications.length > 0) {
+            playNotificationSound()
+          }
+          
+          // Update notifications state
+          setNotifications(newNotifications)
         }
       } catch (error) {
-        console.error('Failed to poll orders:', error)
+        console.error('Failed to poll notifications:', error)
       }
     }
 
-    // Poll every 30 seconds
-    const interval = setInterval(pollOrders, 30000)
+    // Poll every 10 seconds for new notifications (more frequent than before)
+    const interval = setInterval(pollNotifications, 10000)
     
-    // Initial poll (this will set the baseline statuses without creating notifications)
-    pollOrders()
+    // Initial poll
+    pollNotifications()
 
     return () => clearInterval(interval)
-  }, [user])
+  }, [user, notifications])
 
   const addNotification = async (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => {
     // Check for duplicate notifications based on orderId and status
@@ -148,13 +134,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setNotifications(prev => [newNotification, ...prev])
         
         // Play notification sound
-        try {
-          const audio = new Audio('/sounds/happy-bells-notification-937.wav')
-          audio.volume = 0.8
-          audio.play().catch(() => {}) // Ignore autoplay errors
-        } catch (error) {
-          // Ignore audio errors
-        }
+        playNotificationSound()
       }
     } catch (error) {
       console.error('Failed to add notification:', error)

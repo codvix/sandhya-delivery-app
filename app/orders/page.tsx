@@ -142,11 +142,7 @@ export default function OrdersPage() {
               label: "Active", 
               count: orders.filter(o => ["PENDING", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"].includes(o.status)).length 
             },
-            { 
-              key: "completed", 
-              label: "Completed", 
-              count: orders.filter(o => ["DELIVERED", "CANCELLED"].includes(o.status)).length 
-            }
+        
           ].map((tab) => (
             <Button
               key={tab.key}
@@ -188,8 +184,13 @@ export default function OrdersPage() {
             {filteredOrders.map((order) => (
               <OrderCard
                 key={order.id}
-                order={order}
-                onClick={() => router.push(`/orders/${order.id}`)}
+                id={order.id}
+                orderNumber={order.orderNumber}
+                restaurant={order.restaurant}
+                status={order.status}
+                total={order.total}
+                createdAt={order.createdAt}
+                itemCount={order.items.length}
               />
             ))}
           </div>
